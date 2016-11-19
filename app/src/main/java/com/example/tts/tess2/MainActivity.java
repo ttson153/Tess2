@@ -17,7 +17,13 @@ import android.widget.ImageView;
 import android.widget.Toast;
 import android.widget.VideoView;
 
+import com.googlecode.tesseract.android.TessBaseAPI;
+
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -32,6 +38,8 @@ public class MainActivity extends AppCompatActivity {
     private Uri fileUri; // file url to store image/video
     private ImageView imgPreview;
     private Button btnCapturePicture;
+
+    private TessBaseAPI tessBaseAPI;
 
     private void captureImage() {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -59,6 +67,13 @@ public class MainActivity extends AppCompatActivity {
             final Bitmap bitmap = rotateBitmap(BitmapFactory.decodeFile(fileUri.getPath()
                     /*options*/), 90);
             imgPreview.setImageBitmap(bitmap);
+            tessBaseAPI.setImage(bitmap);
+            String text = tessBaseAPI.getUTF8Text();
+            if (text != null)
+                Log.d("Recognized", text);
+            else
+                Log.d("recognies", "null");
+            tessBaseAPI.end();
         } catch (NullPointerException e) {
             e.printStackTrace();
         }
@@ -130,6 +145,41 @@ public class MainActivity extends AppCompatActivity {
         return mediaFile;
     }
 
+    /**
+     * Copy Tesseract model to device local storage (at internalSDcard/bkDictionary/eng.traineddata
+     * @return the path to the model after copy, use this to init tess API
+     * @throws IOException
+     */
+    private String copyTessModel() throws IOException {
+        InputStream inputStream = this.getAssets().open("tessdata/eng.traineddata");
+
+        File storageDir = new File(Environment.getExternalStorageDirectory().getPath() + File.separator + "bkDictionary" + File.separator);
+        if (!storageDir.exists()) {
+            storageDir.mkdir();
+        }
+
+        File tessDir = new File(storageDir.getAbsolutePath() + File.separator + "tessdata");
+        if (!tessDir.exists()) {
+            tessDir.mkdir();
+        }
+
+        File outFile = new File(tessDir.getPath() + File.separator + "eng.traineddata");
+        OutputStream outputStream = new FileOutputStream(outFile);
+
+        //transfer bytes from the inputfile to the outputfile
+        byte[] buffer = new byte[1024];
+        int length;
+        while ((length = inputStream.read(buffer)) > 0) {
+            outputStream.write(buffer, 0, length);
+        }
+
+        //Close the streams
+        outputStream.flush();
+        outputStream.close();
+        inputStream.close();
+        return storageDir.getAbsolutePath();
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -147,6 +197,16 @@ public class MainActivity extends AppCompatActivity {
                 captureImage();
             }
         });
+
+        // init Tesseract
+        tessBaseAPI = new TessBaseAPI();
+        try {
+            String modelPath = copyTessModel();
+            tessBaseAPI.init(modelPath, "eng");
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
